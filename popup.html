@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --accent: #1976d2;
+      --accent-dark: #0d47a1;
+      --success: #16834b;
+      --danger: #c62828;
+      --text: #172033;
+      --muted: #697386;
+      --bg: #f4f7fb;
+      --card: #fff;
+      --border: #dce3ed;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text: #eef3f8;
+        --muted: #a4afbd;
+        --bg: #171c24;
+        --card: #222a35;
+        --border: #394453;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      width: 340px;
+      margin: 0;
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 16px 18px;
+      color: #fff;
+      background: linear-gradient(135deg, #42a5f5, var(--accent-dark));
+    }
+    header img { width: 30px; height: 30px; }
+    header strong { display: block; font-size: 15px; }
+    header small { opacity: .8; }
+    main { padding: 16px; }
+    .panel {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+      box-shadow: 0 4px 18px rgba(20, 42, 74, .06);
+    }
+    .field { margin-bottom: 12px; }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .35px;
+      text-transform: uppercase;
+    }
+    select, input {
+      width: 100%;
+      padding: 9px 10px;
+      color: var(--text);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    button {
+      width: 100%;
+      padding: 10px;
+      border: 0;
+      border-radius: 8px;
+      color: #fff;
+      background: linear-gradient(135deg, #2196f3, var(--accent-dark));
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button.secondary { color: var(--text); background: var(--border); }
+    button.danger { background: var(--danger); }
+    button:disabled { opacity: .5; cursor: default; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .hint { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+    #progressPanel { display: none; margin-top: 12px; }
+    .progress-head { display: flex; justify-content: space-between; margin-bottom: 7px; }
+    .track { height: 7px; overflow: hidden; border-radius: 10px; background: var(--border); }
+    .bar { width: 0; height: 100%; background: var(--success); transition: width .2s; }
+    .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+    .count { padding: 7px; text-align: center; border-radius: 7px; background: var(--bg); }
+    .count strong { display: block; font-size: 16px; }
+    #status { min-height: 18px; margin-top: 10px; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="icon48.png" alt="">
+    <div><strong>Auto Downloader</strong><small>Reliable episode queue</small></div>
+  </header>
+  <main>
+    <section class="panel" id="setupPanel">
+      <p class="hint" id="hint">Open a WitAnime page containing its episode list.</p>
+
+      <div class="field">
+        <label for="episodeMode">Episodes</label>
+        <select id="episodeMode">
+          <option value="all">All episodes</option>
+          <option value="single">One episode</option>
+          <option value="range">Episode range</option>
+        </select>
+      </div>
+
+      <div class="two" id="rangeFields" hidden>
+        <div class="field"><label for="fromEp">From</label><input id="fromEp" type="number" min="1"></div>
+        <div class="field" id="toField"><label for="toEp">To</label><input id="toEp" type="number" min="1"></div>
+      </div>
+
+      <div class="two">
+        <div class="field">
+          <label for="quality">Preferred quality</label>
+          <select id="quality"></select>
+        </div>
+        <div class="field">
+          <label for="host">Preferred host</label>
+          <select id="host"><option value="auto">Auto</option></select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="fallbackMode">Unavailable option</label>
+        <select id="fallbackMode">
+          <option value="fallback">Use best fallback</option>
+          <option value="strict">Fail that episode</option>
+        </select>
+      </div>
+      <button id="startBtn" disabled>Start download queue</button>
+    </section>
+
+    <section class="panel" id="progressPanel">
+      <div class="progress-head"><strong id="jobState">Idle</strong><span id="progressText">0 / 0</span></div>
+      <div class="track"><div class="bar" id="progressBar"></div></div>
+      <div class="counts">
+        <div class="count"><strong id="completedCount">0</strong>Done</div>
+        <div class="count"><strong id="failedCount">0</strong>Failed</div>
+        <div class="count"><strong id="activeCount">0</strong>Active</div>
+      </div>
+      <div id="status"></div>
+      <div class="actions">
+        <button class="danger" id="stopBtn">Stop</button>
+        <button class="secondary" id="retryBtn">Retry failed</button>
+        <button class="secondary" id="copyBtn">Copy report</button>
+        <button class="secondary" id="newBtn">New job</button>
+      </div>
+    </section>
+  </main>
+  <script src="host-config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

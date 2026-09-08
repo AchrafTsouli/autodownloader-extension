@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(node \"C:\\\\Users\\\\tsoul\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-tsoul-Downloads-autodownloader-extension\\\\b4c3914f-4773-468f-946f-0d8999a3e559\\\\scratchpad\\\\test-selection.js\")",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('c:/Users/tsoul/Downloads/autodownloader-extension/manifest.json','utf8'\\)\\); console.log\\('manifest.json is valid JSON'\\)\")",
+      "Bash(node \"C:\\\\Users\\\\tsoul\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-tsoul-Downloads-autodownloader-extension\\\\b4c3914f-4773-468f-946f-0d8999a3e559\\\\scratchpad\\\\make-icons.js\")",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('c:/Users/tsoul/Downloads/autodownloader-extension/manifest.json','utf8'\\)\\); console.log\\('manifest.json OK'\\)\")",
+      "WebFetch(domain:witanime.you)",
+      "Bash(node -e \"require\\('jsdom'\\); console.log\\('jsdom available'\\)\")",
+      "Bash(npm install *)",
+      "Bash(node -e \"require\\('jsdom'\\); console.log\\('jsdom OK'\\)\")",
+      "Bash(node test-dom-extraction.js)",
+      "Bash(node test-order.js)",
+      "Bash(node --check \"c:\\\\Users\\\\tsoul\\\\Downloads\\\\autodownloader-extension\\\\anime-content.js\")",
+      "Bash(node test-range-report.js)",
+      "Bash(node --check \"c:\\\\Users\\\\tsoul\\\\Downloads\\\\autodownloader-extension\\\\popup.js\")",
+      "Bash(node --check \"c:\\\\Users\\\\tsoul\\\\Downloads\\\\autodownloader-extension\\\\host-config.js\")",
+      "Bash(node --check \"c:\\\\Users\\\\tsoul\\\\Downloads\\\\autodownloader-extension\\\\drive-content.js\")",
+      "Bash(node --check \"c:\\\\Users\\\\tsoul\\\\Downloads\\\\autodownloader-extension\\\\mega-content.js\")",
+      "Bash(node --check \"c:\\\\Users\\\\tsoul\\\\Downloads\\\\autodownloader-extension\\\\mega4upload-content.js\")",
+      "Bash(node --check \"c:\\\\Users\\\\tsoul\\\\Downloads\\\\autodownloader-extension\\\\background.js\")",
+      "Bash(node --check \"c:\\\\Users\\\\tsoul\\\\Downloads\\\\autodownloader-extension\\\\mp4upload-content.js\")"
+    ]
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Downloader",
+  "version": "2.0.0",
+  "description": "Queues and tracks WitAnime episode downloads across multiple file hosts.",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "notifications",
+    "storage",
+    "scripting",
+    "tabs"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "*://*.witanime.you/*",
+    "*://witanime.you/*",
+    "*://*.mediafire.com/*",
+    "*://*.workupload.com/*",
+    "*://*.mp4upload.com/*",
+    "*://*.gofile.io/*",
+    "*://*.hexload.com/*",
+    "*://wtsrv.xyz/*",
+    "*://*.wtsrv.xyz/*",
+    "*://kuhaku.rf.gd/*",
+    "*://*.rf.gd/*",
+    "*://*.mega.nz/*",
+    "*://*.mega4upload.net/*",
+    "*://*.drive.google.com/*",
+    "*://drive.google.com/*",
+    "*://*.drive.usercontent.google.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.mediafire.com/*"],
+      "js": ["mediafire-content.js"]
+    },
+    {
+      "matches": ["*://*.workupload.com/*"],
+      "js": ["workupload-content.js"]
+    },
+    {
+      "matches": ["*://*.mp4upload.com/*"],
+      "js": ["mp4upload-content.js"]
+    },
+    {
+      "matches": ["*://*.gofile.io/*"],
+      "js": ["gofile-content.js"]
+    },
+    {
+      "matches": ["*://*.hexload.com/*"],
+      "js": ["hexload-content.js"]
+    },
+    {
+      "matches": ["*://wtsrv.xyz/*", "*://*.wtsrv.xyz/*"],
+      "js": ["wtsrv-content.js"]
+    },
+    {
+      "matches": ["*://kuhaku.rf.gd/*", "*://*.rf.gd/*"],
+      "js": ["kuhaku-content.js"]
+    },
+    {
+      "matches": ["*://*.mega.nz/*"],
+      "js": ["mega-content.js"]
+    },
+    {
+      "matches": ["*://*.mega4upload.net/*"],
+      "js": ["mega4upload-content.js"]
+    },
+    {
+      "matches": ["*://*.drive.google.com/*", "*://drive.google.com/*", "*://*.drive.usercontent.google.com/*"],
+      "js": ["drive-content.js"]
+    }
+  ]
+}
