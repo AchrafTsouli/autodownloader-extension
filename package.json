@@ -1,0 +1,8 @@
+{
+  "name": "witanime-auto-downloader-extension",
+  "private": true,
+  "version": "3.1.0",
+  "scripts": {
+    "test": "node tests/run-tests.js"
+  }
+}

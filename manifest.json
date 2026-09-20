@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Auto Downloader",
-  "version": "2.0.0",
+  "version": "3.1.0",
   "description": "Queues and tracks WitAnime episode downloads across multiple file hosts.",
   "icons": {
     "16": "icon16.png",
@@ -22,6 +22,8 @@
   "host_permissions": [
     "*://*.witanime.you/*",
     "*://witanime.you/*",
+    "*://witanime.site/*",
+    "*://*.witanime.site/*",
     "*://*.mediafire.com/*",
     "*://*.workupload.com/*",
     "*://*.mp4upload.com/*",
@@ -35,7 +37,9 @@
     "*://*.mega4upload.net/*",
     "*://*.drive.google.com/*",
     "*://drive.google.com/*",
-    "*://*.drive.usercontent.google.com/*"
+    "*://*.drive.usercontent.google.com/*",
+    "*://send.now/*",
+    "*://*.send.now/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -85,6 +89,10 @@
     {
       "matches": ["*://*.drive.google.com/*", "*://drive.google.com/*", "*://*.drive.usercontent.google.com/*"],
       "js": ["drive-content.js"]
+    },
+    {
+      "matches": ["*://send.now/*", "*://*.send.now/*"],
+      "js": ["send-content.js"]
     }
   ]
 }

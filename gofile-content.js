@@ -15,6 +15,10 @@
             clearInterval(timer);
             console.log('[gofile] Starting download');
             control.click();
+            setTimeout(() => chrome.runtime.sendMessage({
+                type: 'HOST_DOWNLOAD_TRIGGERED',
+                host: 'gofile'
+            }).catch(() => {}), 4000);
         } else if (Date.now() - startedAt > 30000) {
             clearInterval(timer);
             console.warn('[gofile] Download control was not found');

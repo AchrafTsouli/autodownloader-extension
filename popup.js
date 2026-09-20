@@ -1,5 +1,8 @@
 let pageData = null;
 let currentJob = null;
+let savedPrefs = {};
+
+const PREFS_KEY = 'autoDownloaderPrefs';
 
 const $ = id => document.getElementById(id);
 
@@ -8,35 +11,101 @@ async function inspectCurrentPage(tabId) {
         target: { tabId },
         world: 'MAIN',
         func: async () => {
-            const episodeLinks = Array.from(document.querySelectorAll('a[onclick*="openEpisode"]'));
-            const episodes = episodeLinks.map(link => {
-                const encoded = (link.getAttribute('onclick') || '')
-                    .match(/openEpisode\(['"]([^'"]+)['"]\)/)?.[1];
-                const number = Number.parseInt((link.textContent || '').match(/(\d+)/)?.[1], 10);
-                if (!encoded || !Number.isInteger(number)) return null;
-                try {
-                    return { number, url: atob(encoded) };
-                } catch {
-                    return null;
+            const aliases = {
+                'google drive': 'drive',
+                'mega.nz': 'mega',
+                'rf': 'kuhaku',
+                'rf.gd': 'kuhaku',
+                'kuhaku': 'kuhaku',
+                'wtsrv': 'wtsrv',
+                'wtsrv.xyz': 'wtsrv',
+                'send.now': 'send',
+                'send': 'send'
+            };
+
+            function modernEpisodes() {
+                const groups = new Map();
+                for (const link of document.querySelectorAll('a[href]')) {
+                    try {
+                        const url = new URL(link.href, location.href);
+                        if (!/(^|\.)witanime\.site$/i.test(url.hostname)) continue;
+                        const match = url.pathname.match(/^\/watch\/([^/]+)\/(\d+)\/?$/i);
+                        if (!match) continue;
+                        const slug = match[1];
+                        const number = Number.parseInt(match[2], 10);
+                        if (!groups.has(slug)) groups.set(slug, new Map());
+                        groups.get(slug).set(number, { number, url: url.href });
+                    } catch {}
                 }
-            }).filter(Boolean).sort((a, b) => a.number - b.number);
+
+                const current = location.pathname.match(/^\/(?:anime|watch)\/([^/]+)/i)?.[1];
+                const selected = current && groups.has(current)
+                    ? groups.get(current)
+                    : (groups.size === 1 ? groups.values().next().value : null);
+                return selected ? [...selected.values()].sort((a, b) => a.number - b.number) : [];
+            }
+
+            function legacyEpisodes() {
+                return Array.from(document.querySelectorAll('a[onclick*="openEpisode"]')).map(link => {
+                    const encoded = (link.getAttribute('onclick') || '')
+                        .match(/openEpisode\(['"]([^'"]+)['"]\)/)?.[1];
+                    const number = Number.parseInt((link.textContent || '').match(/(\d+)/)?.[1], 10);
+                    if (!encoded || !Number.isInteger(number)) return null;
+                    try {
+                        return { number, url: atob(encoded) };
+                    } catch {
+                        return null;
+                    }
+                }).filter(Boolean).sort((a, b) => a.number - b.number);
+            }
+
+            const modern = modernEpisodes();
+            const episodes = modern.length ? modern : legacyEpisodes();
 
             if (!episodes.length) return null;
             try {
-                const response = await fetch(episodes[0].url);
+                const response = await fetch(episodes[0].url, { credentials: 'same-origin' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const documentCopy = new DOMParser().parseFromString(await response.text(), 'text/html');
                 const hosts = new Set();
                 const qualities = new Set();
-                const aliases = {
-                    'google drive': 'drive',
-                    'mega.nz': 'mega',
-                    'rf': 'kuhaku',
-                    'rf.gd': 'kuhaku',
-                    'kuhaku': 'kuhaku',
-                    'wtsrv': 'wtsrv',
-                    'wtsrv.xyz': 'wtsrv'
-                };
+                const versions = new Set();
+                const languages = new Set();
+
+                if (modern.length) {
+                    const csrf = documentCopy.querySelector('meta[name="csrf-token"]')?.content;
+                    if (!csrf) throw new Error('WitAnime CSRF token was not found');
+                    const episodeUrl = new URL(episodes[0].url);
+                    const sourceUrl = `${episodeUrl.pathname.replace(/\/$/, '')}/sources`;
+                    const sourceResponse = await fetch(sourceUrl, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            Accept: 'application/json',
+                            'X-CSRF-TOKEN': csrf
+                        }
+                    });
+                    if (!sourceResponse.ok) throw new Error(`Sources HTTP ${sourceResponse.status}`);
+                    const manifest = await sourceResponse.json();
+                    for (const [quality, entries] of Object.entries(manifest.downloads || {})) {
+                        if (!Array.isArray(entries) || !entries.length) continue;
+                        qualities.add(String(quality).toUpperCase());
+                        entries.forEach(entry => {
+                            const label = String(entry?.label || '').trim().toLowerCase();
+                            if (label) hosts.add(aliases[label] || label);
+                            if (entry?.version) versions.add(entry.version);
+                            if (entry?.lang) languages.add(entry.lang);
+                        });
+                    }
+                    return {
+                        episodes,
+                        hosts: [...hosts],
+                        qualities: [...qualities],
+                        versions: [...versions],
+                        languages: [...languages],
+                        siteVersion: 'modern'
+                    };
+                }
 
                 documentCopy.querySelectorAll('.quality-list').forEach(list => {
                     Array.from(list.children).forEach(li => {
@@ -52,9 +121,24 @@ async function inspectCurrentPage(tabId) {
                         }
                     });
                 });
-                return { episodes, hosts: [...hosts], qualities: [...qualities] };
+                return {
+                    episodes,
+                    hosts: [...hosts],
+                    qualities: [...qualities],
+                    versions: [],
+                    languages: [],
+                    siteVersion: 'legacy'
+                };
             } catch (error) {
-                return { episodes, hosts: [], qualities: [], warning: error.message };
+                return {
+                    episodes,
+                    hosts: [],
+                    qualities: [],
+                    versions: [],
+                    languages: [],
+                    siteVersion: modern.length ? 'modern' : 'legacy',
+                    warning: error.message
+                };
             }
         }
     });
@@ -72,7 +156,35 @@ function populateOptions(data) {
     const host = $('host');
     host.innerHTML = '';
     host.add(new Option('Auto', 'auto'));
-    data.hosts.forEach(item => host.add(new Option(hostDisplayName(item), item)));
+    const supportedHosts = data.hosts.filter(item =>
+        HOST_PRIORITY.includes(item) || HOST_ADAPTERS[item]?.manual
+    );
+    const automaticHosts = supportedHosts.filter(item => hostIsAutomatic(item));
+    const manualHosts = supportedHosts.filter(item => HOST_ADAPTERS[item]?.manual);
+    supportedHosts.forEach(item => host.add(new Option(hostDisplayName(item), item)));
+
+    const version = $('version');
+    version.innerHTML = '';
+    version.add(new Option('Any', ''));
+    (data.versions || []).forEach(item => {
+        const label = item === 'sub' ? 'Subtitled' : (item === 'dub' ? 'Dubbed' : item);
+        version.add(new Option(label, item));
+    });
+
+    const language = $('language');
+    language.innerHTML = '';
+    language.add(new Option('Any', ''));
+    const languageNames = { jp: 'Japanese', ar: 'Arabic', en: 'English', kr: 'Korean', es: 'Spanish', cn: 'Chinese' };
+    (data.languages || []).forEach(item => language.add(new Option(languageNames[item] || item, item)));
+
+    $('hostOrder').value = savedPrefs.hostOrder || supportedHosts.join(', ');
+    for (const id of ['quality', 'host', 'version', 'language', 'downloadManager', 'fallbackMode']) {
+        const value = savedPrefs[id];
+        if (value && [...$(id).options].some(option => option.value === value)) $(id).value = value;
+    }
+    if (host.value === 'auto' && !automaticHosts.length && manualHosts.length) {
+        host.value = manualHosts[0];
+    }
 
     const numbers = data.episodes.map(item => item.number);
     const min = Math.min(...numbers);
@@ -83,8 +195,20 @@ function populateOptions(data) {
     $('toEp').max = max;
     $('fromEp').placeholder = String(min);
     $('toEp').placeholder = String(max);
-    $('hint').textContent = `${data.episodes.length} episodes found (${min}–${max}).`;
-    $('startBtn').disabled = false;
+    if (data.warning && data.siteVersion === 'modern') {
+        $('hint').textContent = `Compatibility check failed: ${data.warning}`;
+        $('startBtn').disabled = true;
+    } else if (data.hosts.length && !supportedHosts.length) {
+        $('hint').textContent = `${data.episodes.length} episodes found, but no supported download host is available.`;
+        $('startBtn').disabled = true;
+    } else {
+        $('hint').textContent = `${data.episodes.length} episodes found (${min}–${max}).`
+            + (manualHosts.length && !automaticHosts.length
+                ? ' Only a manual host is available; verification will be required.'
+                : '')
+            + (data.warning ? ` Host check warning: ${data.warning}` : '');
+        $('startBtn').disabled = false;
+    }
 }
 
 function selectedEpisodes() {
@@ -120,14 +244,14 @@ function renderJob(job) {
     $('progressPanel').style.display = visibleProgress ? 'block' : 'none';
 
     const terminal = job.results.filter(item =>
-        ['completed', 'failed', 'cancelled', 'manual_action_required', 'external_handoff'].includes(item.status)
+        ['completed', 'failed', 'cancelled', 'skipped', 'manual_action_required', 'external_handoff'].includes(item.status)
     );
     const completed = job.results.filter(item =>
         ['completed', 'external_handoff'].includes(item.status)
     ).length;
     const failed = job.results.filter(item => item.status === 'failed').length;
     const active = job.results.filter(item =>
-        !['completed', 'failed', 'cancelled', 'manual_action_required', 'external_handoff'].includes(item.status)
+        !['completed', 'failed', 'cancelled', 'skipped', 'manual_action_required', 'external_handoff'].includes(item.status)
     ).length;
     const total = job.episodes.length;
 
@@ -139,15 +263,39 @@ function renderJob(job) {
     $('activeCount').textContent = active;
     const currentRecord = [...job.results].reverse().find(item =>
         item.episode === job.currentEpisode
-        && !['completed', 'failed', 'cancelled', 'external_handoff'].includes(item.status)
+        && !['completed', 'failed', 'cancelled', 'skipped', 'external_handoff'].includes(item.status)
     );
     $('status').textContent = currentRecord?.hostMessage
         || job.abortReason
         || (job.currentEpisode
             ? `Processing episode ${job.currentEpisode}`
             : `${completed} completed, ${failed} failed`);
-    $('stopBtn').disabled = !['queued', 'running', 'stopping'].includes(job.status);
-    $('retryBtn').disabled = failed === 0 || ['queued', 'running', 'stopping'].includes(job.status);
+    $('stopBtn').disabled = !['queued', 'running', 'pausing', 'paused', 'stopping'].includes(job.status);
+    $('pauseBtn').disabled = !['queued', 'running'].includes(job.status);
+    $('resumeBtn').disabled = job.status !== 'paused';
+    $('skipBtn').disabled = !job.currentEpisode || !['running', 'pausing'].includes(job.status);
+    $('retryBtn').disabled = failed === 0 || ['queued', 'running', 'pausing', 'stopping'].includes(job.status);
+
+    const resultsByEpisode = new Map(job.results.map(item => [item.episode, item]));
+    $('episodeResults').innerHTML = job.episodes.map(episode => {
+        const item = resultsByEpisode.get(episode.number);
+        const status = item?.status || (episode.number === job.currentEpisode ? 'active' : 'queued');
+        const detail = item
+            ? [item.actualHost, item.actualQuality, item.reason || item.hostMessage].filter(Boolean).join(' · ')
+            : '';
+        return `<div class="result-row"><strong>Episode ${escapeHtml(episode.number)}</strong><span>${escapeHtml(status)}${detail ? ` — ${escapeHtml(detail)}` : ''}</span></div>`;
+    }).join('');
+    updateElapsed();
+}
+
+function updateElapsed() {
+    if (!currentJob?.createdAt) {
+        $('elapsed').textContent = '';
+        return;
+    }
+    const end = currentJob.finishedAt ? Date.parse(currentJob.finishedAt) : Date.now();
+    const seconds = Math.max(0, Math.floor((end - Date.parse(currentJob.createdAt)) / 1000));
+    $('elapsed').textContent = `Elapsed: ${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 $('episodeMode').addEventListener('change', () => {
@@ -159,6 +307,22 @@ $('episodeMode').addEventListener('change', () => {
 $('startBtn').addEventListener('click', async () => {
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const hostPriority = [...new Set(
+            $('hostOrder').value.split(',')
+                .map(item => normalizeHostLabel(item))
+                .filter(item => HOST_PRIORITY.includes(item))
+        )];
+        const preferences = {
+            quality: $('quality').value,
+            host: $('host').value,
+            version: $('version').value,
+            language: $('language').value,
+            downloadManager: $('downloadManager').value,
+            fallbackMode: $('fallbackMode').value,
+            hostOrder: hostPriority.join(', ')
+        };
+        savedPrefs = preferences;
+        await chrome.storage.local.set({ [PREFS_KEY]: preferences });
         const response = await chrome.runtime.sendMessage({
             type: 'START_JOB',
             sourceTabId: tab.id,
@@ -166,7 +330,11 @@ $('startBtn').addEventListener('click', async () => {
             options: {
                 quality: $('quality').value,
                 host: $('host').value,
-                fallbackMode: $('fallbackMode').value
+                version: $('version').value || null,
+                lang: $('language').value || null,
+                downloadManager: $('downloadManager').value,
+                fallbackMode: $('fallbackMode').value,
+                hostPriority
             }
         });
         if (!response?.ok) throw new Error(response?.error || 'Could not start job');
@@ -177,6 +345,12 @@ $('startBtn').addEventListener('click', async () => {
 });
 
 $('stopBtn').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'STOP_JOB' }));
+$('pauseBtn').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'PAUSE_JOB' }));
+$('resumeBtn').addEventListener('click', async () => {
+    const response = await chrome.runtime.sendMessage({ type: 'RESUME_JOB' });
+    if (response?.ok) renderJob(response.job);
+});
+$('skipBtn').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'SKIP_CURRENT' }));
 $('retryBtn').addEventListener('click', async () => {
     const response = await chrome.runtime.sendMessage({ type: 'RETRY_FAILED' });
     if (response?.ok) renderJob(response.job);
@@ -205,17 +379,47 @@ $('newBtn').addEventListener('click', async () => {
     if (!pageData) await loadPageData();
 });
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    })[character]);
+}
+
+async function loadHistory() {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_HISTORY' }).catch(() => null);
+    const history = response?.history || [];
+    $('historyList').innerHTML = history.length
+        ? history.map(item => {
+            const completed = item.results?.filter(result =>
+                ['completed', 'external_handoff'].includes(result.status)
+            ).length || 0;
+            const failed = item.results?.filter(result => result.status === 'failed').length || 0;
+            return `<div class="history-item">${escapeHtml(new Date(item.createdAt).toLocaleString())} · ${completed}/${item.episodes?.length || 0} done${failed ? ` · ${failed} failed` : ''}</div>`;
+        }).join('')
+        : 'No job history yet.';
+}
+
+$('clearHistoryBtn').addEventListener('click', async () => {
+    await chrome.runtime.sendMessage({ type: 'CLEAR_HISTORY' });
+    await loadHistory();
+});
+
 chrome.runtime.onMessage.addListener(message => {
-    if (message.type === 'JOB_UPDATED') renderJob(message.job);
+    if (message.type === 'JOB_UPDATED') {
+        renderJob(message.job);
+        if (['completed', 'cancelled', 'failed'].includes(message.job.status)) loadHistory();
+    }
 });
 
 (async function initialize() {
+    savedPrefs = (await chrome.storage.local.get(PREFS_KEY))[PREFS_KEY] || {};
+    await loadHistory();
     const existing = await chrome.runtime.sendMessage({ type: 'GET_JOB' }).catch(() => null);
     if (
         existing?.job
         && (
             existing.job.results?.length
-            || ['queued', 'running', 'stopping'].includes(existing.job.status)
+            || ['queued', 'running', 'pausing', 'paused', 'stopping'].includes(existing.job.status)
         )
     ) {
         renderJob(existing.job);
@@ -223,3 +427,5 @@ chrome.runtime.onMessage.addListener(message => {
     }
     await loadPageData();
 })();
+
+setInterval(updateElapsed, 1000);

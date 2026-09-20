@@ -9,7 +9,9 @@
             'rf.gd': 'kuhaku',
             'kuhaku': 'kuhaku',
             'wtsrv': 'wtsrv',
-            'wtsrv.xyz': 'wtsrv'
+            'wtsrv.xyz': 'wtsrv',
+            'send.now': 'send',
+            'send': 'send'
         };
         const key = (label || '').trim().toLowerCase();
         return aliases[key] || key;
@@ -28,6 +30,7 @@
             if (hostname.includes('mega4upload')) return 'mega4upload';
             if (hostname.includes('mega.nz')) return 'mega';
             if (hostname.includes('drive.google') || hostname.includes('drive.usercontent.google')) return 'drive';
+            if (hostname === 'send.now' || hostname.endsWith('.send.now')) return 'send';
             return hostname;
         } catch {
             return 'unknown';
@@ -75,7 +78,7 @@
         return output;
     }
 
-    window.autoDownloaderExtractEpisode = function () {
+    function extractLegacyEpisode() {
         // WitAnime's original format used _t.l + _s. The current cx2.js
         // format renamed those fields to _b.l + _x. Accept both so cached or
         // older episode pages continue to work as well.
@@ -120,8 +123,91 @@
 
         return {
             title: document.title,
+            flow: 'legacy_encrypted',
             downloads
         };
+    }
+
+    function csrfToken() {
+        return document.querySelector('meta[name="csrf-token"]')?.content || '';
+    }
+
+    function isModernWatchPage() {
+        return /(^|\.)witanime\.site$/i.test(location.hostname)
+            && /^\/watch\/[^/]+\/\d+\/?$/i.test(location.pathname);
+    }
+
+    async function extractModernEpisode() {
+        const csrf = csrfToken();
+        if (!csrf) throw new Error('WitAnime CSRF token is missing');
+
+        const basePath = location.pathname.replace(/\/$/, '');
+        const response = await fetch(`${basePath}/sources`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrf
+            }
+        });
+        if (!response.ok) {
+            const stale = response.status === 404 || response.status === 419;
+            throw new Error(stale
+                ? 'WitAnime download session expired; reload the page and retry'
+                : `WitAnime sources request failed (HTTP ${response.status})`);
+        }
+
+        const manifest = await response.json();
+        const downloads = [];
+        for (const [quality, entries] of Object.entries(manifest.downloads || {})) {
+            if (!Array.isArray(entries)) continue;
+            for (const entry of entries) {
+                const token = String(entry?.token || '');
+                if (!/^[a-f0-9]{64}$/i.test(token)) continue;
+                downloads.push({
+                    token,
+                    quality: String(quality).toUpperCase(),
+                    host: normalizeHostLabel(entry.label),
+                    version: entry.version || null,
+                    lang: entry.lang || null,
+                    flow: 'witanime_api'
+                });
+            }
+        }
+        if (!downloads.length) throw new Error('WitAnime returned no downloadable sources');
+
+        return {
+            title: document.title,
+            flow: 'witanime_api',
+            downloads
+        };
+    }
+
+    window.autoDownloaderExtractEpisode = async function () {
+        return isModernWatchPage() ? extractModernEpisode() : extractLegacyEpisode();
+    };
+
+    window.autoDownloaderPrepareDownload = async function (token) {
+        if (!isModernWatchPage()) throw new Error('This is not a current WitAnime watch page');
+        if (!/^[a-f0-9]{64}$/i.test(token)) throw new Error('Invalid WitAnime download token');
+
+        const csrf = csrfToken();
+        if (!csrf) throw new Error('WitAnime CSRF token is missing');
+        const response = await fetch(`/watch/download-source/${token}`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrf
+            }
+        });
+        if (!response.ok) {
+            const stale = response.status === 404 || response.status === 419;
+            throw new Error(stale
+                ? 'WitAnime download session expired; reload the page and retry'
+                : `WitAnime download preparation failed (HTTP ${response.status})`);
+        }
+        return new URL(`/watch/download-gate/${token}`, location.origin).href;
     };
 
     // Some redirect URLs (notably wtsrv.xyz and kuhaku.rf.gd) are not valid

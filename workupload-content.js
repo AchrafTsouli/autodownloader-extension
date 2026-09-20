@@ -24,6 +24,10 @@
             clearInterval(timer);
             console.log('[workupload] Auto-clicking download button...');
             btn.click();
+            setTimeout(() => chrome.runtime.sendMessage({
+                type: 'HOST_DOWNLOAD_TRIGGERED',
+                host: 'workupload'
+            }).catch(() => {}), 4000);
         } else if (Date.now() - start > timeoutMs) {
             clearInterval(timer);
             console.warn('[workupload] Could not find a download button automatically. Please click manually.');
