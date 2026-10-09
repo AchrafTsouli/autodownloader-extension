@@ -102,13 +102,36 @@
     .history-item { padding: 7px 0; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 11px; }
     .compact { font-size: 11px; }
   </style>
+  <link rel="stylesheet" href="orbit.css">
 </head>
 <body>
   <header>
-    <img src="icon48.png" alt="">
-    <div><strong>Auto Downloader</strong><small>Reliable episode queue</small></div>
+    <img src="orbit-mark.svg" alt="">
+    <div><strong>Anime Orbit</strong></div>
+    <button id="notificationSettingsBtn" class="header-button" aria-label="Tracking settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg><span class="notification-dot"></span></button>
+    <button id="orbitSettingsBtn" class="header-button" aria-label="Season settings">⚙</button>
   </header>
+  <nav class="orbit-tabs" aria-label="Main views">
+    <button data-view="week" class="selected">This Week</button>
+    <button data-view="seasons">Seasons</button>
+    <button data-view="downloads">Downloads</button>
+  </nav>
+  <section id="trackerView">
+    <div class="orbit-heading"><div><h1 id="seasonHeading">Your orbit</h1><p id="trackerSubtitle">Your weekly episodes at a glance.</p></div><div id="orbitStats" class="orbit-stats"></div></div>
+    <div id="seasonSettings" class="two" hidden><select id="trackSeason" aria-label="Season"><option>Winter</option><option>Spring</option><option>Summer</option><option>Fall</option></select><input id="trackYear" type="number" min="2000" max="2100" aria-label="Year"></div>
+    <div id="weeklyStrip" class="weekly-strip" aria-label="Current week"></div>
+    <div id="calendarFilters" class="calendar-filters"><button data-calendar="all" class="selected">All releases</button><button data-calendar="unknown">Unscheduled</button></div>
+    <div id="seasonStrip" class="season-strip" hidden></div>
+    <div id="weeklySection" class="section-heading"><h2>Ready to watch</h2><span id="trackerSummary"></span></div>
+    <div id="watchlistCards"></div>
+    <button id="followAnimeBtn">＋ Follow anime</button>
+    <div id="seasonArchive" hidden></div>
+    <div id="trackerFooter" class="tracker-footer"></div>
+    <p class="hint" id="trackerHint">Open a WitAnime anime page to follow it. Checks run hourly while your browser is open.</p>
+  </section>
+  <div id="downloadsView" hidden>
   <main>
+    <div class="download-heading"><div><h1>Downloads</h1><p>Hand episodes to your download manager.</p></div><span id="managerBadge" class="manager-badge">Browser mode</span></div>
     <section class="panel" id="setupPanel">
       <p class="hint" id="hint">Open a WitAnime page containing its episode list.</p>
 
@@ -184,11 +207,13 @@
       <div id="status"></div>
       <div class="hint compact" id="elapsed"></div>
       <div class="results" id="episodeResults"></div>
-      <div class="actions">
-        <button class="danger" id="stopBtn">Stop</button>
+      <div class="download-primary-actions">
         <button class="secondary" id="pauseBtn">Pause</button>
-        <button class="secondary" id="resumeBtn">Resume</button>
         <button class="secondary" id="skipBtn">Skip current</button>
+        <button class="secondary" id="stopBtn">Stop</button>
+      </div>
+      <div class="actions">
+        <button class="secondary" id="resumeBtn">Resume</button>
         <button class="secondary" id="retryBtn">Retry unfinished</button>
         <button class="secondary" id="copyBtn">Copy report</button>
         <button class="secondary" id="newBtn">New job</button>
@@ -200,7 +225,28 @@
       <div id="historyList" class="hint">No job history yet.</div>
     </section>
   </main>
+  </div>
+  <dialog id="animeEditor">
+    <form id="animeEditorForm">
+      <h2 id="animeEditorTitle">Edit anime</h2>
+      <p id="animeEditorHint" class="hint"></p>
+      <div id="watchedEditor"><label for="watchedEpisode">Last episode watched</label><input id="watchedEpisode" type="number" min="0" step="1"><p class="hint">For example, enter 2 if you watched episodes 1 and 2. Use 0 to start over.</p></div>
+      <div id="scheduleEditor" hidden><label for="releaseDaySelect">Fallback day for unlisted anime</label><select id="releaseDaySelect"><option value="">Automatic / unknown</option><option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option></select><p class="hint" id="scheduleSource"></p><button type="button" id="lookupScheduleBtn" class="secondary">Refresh WitAnime schedule</button></div>
+      <p id="animeEditorError" role="alert" class="hint"></p>
+      <div class="two"><button type="button" id="cancelAnimeEditor" class="secondary">Cancel</button><button type="submit">Save</button></div>
+    </form>
+  </dialog>
+  <dialog id="animeDetail" aria-labelledby="animeDetailTitle">
+    <button id="closeAnimeDetail" class="detail-close secondary" aria-label="Close anime details">×</button>
+    <div id="animeDetailContent"></div>
+    <p id="animeDetailError" class="hint" role="status"></p>
+  </dialog>
   <script src="host-config.js"></script>
   <script src="popup.js"></script>
+  <script src="tracker-schedule.js"></script>
+  <script src="tracker-progress.js"></script>
+  <script src="witanime-schedule.js"></script>
+  <script src="tracker-popup.js"></script>
+  <script src="anime-detail.js"></script>
 </body>
 </html>

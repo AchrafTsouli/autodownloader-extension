@@ -7,6 +7,9 @@ const PREFS_KEY = 'autoDownloaderPrefs';
 const $ = id => document.getElementById(id);
 
 async function inspectCurrentPage(tabId) {
+    await chrome.scripting.executeScript({
+        target: { tabId }, world: 'MAIN', files: ['site-request.js']
+    });
     const [{ result } = {}] = await chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
@@ -24,6 +27,20 @@ async function inspectCurrentPage(tabId) {
             };
 
             function modernEpisodes() {
+                const movie = location.pathname.match(/^\/(?:watch\/)?movie\/([^/]+)\/?$/i);
+                if (movie && /(^|\.)witanime\.site$/i.test(location.hostname)) {
+                    const links = [...document.querySelectorAll('a[href]')];
+                    const watch = links.find(link => {
+                        try {
+                            const url = new URL(link.href, location.href);
+                            return url.origin === location.origin
+                                && url.pathname === `/watch/movie/${movie[1]}`;
+                        } catch { return false; }
+                    });
+                    // Prefer the actual watch link; some movie pages serve
+                    // their player and source manifest on the detail page.
+                    return [{ number: 1, url: watch?.href || location.href, kind: 'movie' }];
+                }
                 const groups = new Map();
                 for (const link of document.querySelectorAll('a[href]')) {
                     try {
@@ -64,7 +81,7 @@ async function inspectCurrentPage(tabId) {
 
             if (!episodes.length) return null;
             try {
-                const response = await fetch(episodes[0].url, { credentials: 'same-origin' });
+                const response = await window.autoDownloaderSiteRequest(episodes[0].url, { credentials: 'same-origin' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const documentCopy = new DOMParser().parseFromString(await response.text(), 'text/html');
                 const hosts = new Set();
@@ -77,7 +94,7 @@ async function inspectCurrentPage(tabId) {
                     if (!csrf) throw new Error('WitAnime CSRF token was not found');
                     const episodeUrl = new URL(episodes[0].url);
                     const sourceUrl = `${episodeUrl.pathname.replace(/\/$/, '')}/sources`;
-                    const sourceResponse = await fetch(sourceUrl, {
+                    const sourceResponse = await window.autoDownloaderSiteRequest(sourceUrl, {
                         method: 'POST',
                         credentials: 'same-origin',
                         headers: {
@@ -148,7 +165,7 @@ async function inspectCurrentPage(tabId) {
 function populateOptions(data) {
     const quality = $('quality');
     quality.innerHTML = '';
-    const available = ['FHD', 'HD', 'SD'].filter(item => data.qualities.includes(item));
+    const available = ['4K', 'FHD', 'HD', 'SD'].filter(item => data.qualities.includes(item));
     (available.length ? available : ['FHD', 'HD', 'SD']).forEach(item => {
         quality.add(new Option(item, item));
     });
@@ -233,6 +250,7 @@ function selectedEpisodes() {
 
 function renderJob(job) {
     currentJob = job;
+    $('managerBadge').textContent = job?.options?.downloadManager === 'external' ? '↗ IDM mode' : 'Browser mode';
     if (!job) {
         $('setupPanel').style.display = '';
         $('progressPanel').style.display = 'none';
@@ -283,7 +301,9 @@ function renderJob(job) {
         const detail = item
             ? [item.actualHost, item.actualQuality, item.reason || item.hostMessage].filter(Boolean).join(' · ')
             : '';
-        return `<div class="result-row"><strong>Episode ${escapeHtml(episode.number)}</strong><span>${escapeHtml(status)}${detail ? ` — ${escapeHtml(detail)}` : ''}</span></div>`;
+        const labels = {external_handoff:'Handed to IDM',preparing_download:'Preparing…',completed:'Completed',waiting_for_download:'Waiting…',downloading:'Downloading',queued:'Queued'};
+        const done = ['completed','external_handoff'].includes(status);
+        return `<div class="result-row"><div class="episode-glyph">▷</div><div class="download-detail"><strong>Episode ${escapeHtml(episode.number)}</strong><small>${escapeHtml(detail || 'Waiting in queue')}</small></div><div class="download-state ${done ? 'done' : status === 'failed' ? 'failed' : ''}">${done ? '✓ ' : ''}${escapeHtml(labels[status] || status.replaceAll('_',' '))}</div></div>`;
     }).join('');
     updateElapsed();
 }
@@ -425,7 +445,7 @@ chrome.runtime.onMessage.addListener(message => {
         renderJob(existing.job);
         return;
     }
-    await loadPageData();
+    await loadPageData().catch(error => { $('hint').textContent = error.message; });
 })();
 
 setInterval(updateElapsed, 1000);

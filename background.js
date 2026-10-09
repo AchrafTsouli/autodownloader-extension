@@ -2,7 +2,7 @@ importScripts('host-config.js');
 
 const STORAGE_KEY = 'autoDownloaderJob';
 const HISTORY_KEY = 'autoDownloaderHistory';
-const QUALITY_PRIORITY = ['FHD', 'HD', 'SD'];
+const QUALITY_PRIORITY = ['4K', 'FHD', 'HD', 'SD'];
 const pendingDownloadTabs = new Map();
 const cancellationWaiters = new Set();
 let activeJob = null;
@@ -96,7 +96,7 @@ async function archiveJob(job) {
 
 function qualityOrder(requestedQuality, fallbackMode) {
     if (fallbackMode === 'strict') return [requestedQuality];
-    if (fallbackMode === 'smallest') return ['SD', 'HD', 'FHD'];
+    if (fallbackMode === 'smallest') return [...QUALITY_PRIORITY].reverse();
     if (fallbackMode === 'lower') {
         const index = QUALITY_PRIORITY.indexOf(requestedQuality);
         return index === -1 ? [requestedQuality] : QUALITY_PRIORITY.slice(index);
@@ -171,7 +171,7 @@ async function extractEpisode(tabId) {
     await chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
-        files: ['anime-content.js']
+        files: ['site-request.js', 'anime-content.js']
     });
     const [{ result } = {}] = await chrome.scripting.executeScript({
         target: { tabId },
@@ -861,3 +861,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.runtime.onStartup.addListener(() => runJob());
+importScripts('witanime-schedule.js', 'tracker-progress.js', 'tracker-background.js');

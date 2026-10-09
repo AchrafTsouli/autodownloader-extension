@@ -1,0 +1,146 @@
+:root { --accent:#8b5cf6; --accent-dark:#6438db; --success:#56dfaa; --danger:#db4667; --text:#f2efff; --muted:#aaa6c8; --bg:#0c1222; --card:#141c30; --border:#2b3450; color-scheme:dark; }
+@media(prefers-color-scheme:dark) { :root { --text:#f2efff; --muted:#aaa6c8; --bg:#0c1222; --card:#141c30; --border:#2b3450; } }
+body { width:440px; max-height:600px; background:radial-gradient(ellipse at top left,#1c2040,var(--bg) 70%); }
+header { background:transparent; padding:20px 20px 14px; }
+header strong { font-size:21px; letter-spacing:-.6px; }
+header small { color:var(--muted); }
+header img { width:38px; height:38px; }
+button { background:linear-gradient(120deg,#a078ff,#7044ef); transition:filter .15s; }
+button:hover:not(:disabled) { filter:brightness(1.12); }
+button:focus-visible,a:focus-visible { outline:2px solid #c8b7ff; outline-offset:3px; }
+button.secondary { background:#202a42; }
+.orbit-tabs { display:flex; gap:5px; margin:0 18px 16px; padding:5px; border:1px solid var(--border); border-radius:13px; }
+.orbit-tabs button { background:transparent; color:var(--muted); font-size:12px; }
+.orbit-tabs .selected { background:#7044ef; color:white; }
+#trackerView { padding:0 18px 20px; }
+.orbit-heading { display:flex; justify-content:space-between; align-items:center; }
+h1 { margin:0; font-size:26px; letter-spacing:-.8px; }
+.orbit-heading p { margin:5px 0 18px; color:var(--muted); }
+.live-dot { color:var(--success); font-size:22px; }
+#watchlistCards { margin:14px 0; display:grid; gap:10px; }
+.anime-card { display:flex; gap:12px; padding:12px; border:1px solid var(--border); border-radius:13px; background:linear-gradient(125deg,#19233a,#121a2b); }
+.anime-poster { width:64px; height:90px; object-fit:cover; border-radius:8px; background:#30284c; flex-shrink:0; display:grid; place-items:center; color:#bda7ff; font-size:26px; }
+.anime-body { flex:1; min-width:0; }
+.anime-body strong { display:block; font-size:14px; overflow-wrap:anywhere; }
+.anime-meta { color:var(--muted); font-size:11px; margin:5px 0; }
+.new-badge { display:inline-block; background:#8050ed; color:white; padding:2px 5px; border-radius:4px; font-size:9px; margin-right:5px; }
+.anime-actions { display:flex; gap:5px; flex-wrap:wrap; margin-top:8px; }
+.anime-actions button { width:auto; padding:6px 8px; font-size:10px; }
+.empty-orbit { text-align:center; padding:30px 18px; border:1px dashed var(--border); border-radius:14px; color:var(--muted); }
+.empty-orbit strong { display:block; color:var(--text); font-size:17px; margin-bottom:8px; }
+#trackerHint { margin:12px 0 0; line-height:1.6; }
+.bar { background:linear-gradient(90deg,#8b5cf6,#bda1ff); }
+[hidden] { display:none !important; }
+/* Match the approved compact three-view concept. */
+body { background:radial-gradient(ellipse at top left,#171e30,#0d1422 70%); }
+header { padding:16px 19px 12px; gap:12px; }
+header img { width:43px; height:43px; }
+header>div { flex:1; }
+.header-button { position:relative; width:29px; padding:3px; color:#c3bfee; background:transparent; font-size:22px; }
+.notification-dot { position:absolute; right:1px; top:1px; width:6px; height:6px; border-radius:50%; background:var(--success); }
+.orbit-tabs { margin:0 18px; padding:4px; }
+.orbit-tabs button { font-weight:500; padding:10px 4px; }
+#trackerView { border-top:1px solid var(--border); margin-top:9px; padding:16px 18px 14px; }
+.orbit-heading { align-items:start; gap:8px; }
+h1 { line-height:1.15; }
+.orbit-heading p,.download-heading p { margin:6px 0 18px; font-size:12px; color:var(--muted); }
+.orbit-stats { display:flex; padding-top:2px; }
+.orbit-stats>div { min-width:57px; text-align:center; padding:0 7px; font-size:10px; color:var(--muted); }
+.orbit-stats>div+div { border-left:1px solid var(--border); }
+.orbit-stats strong { display:block; font-size:23px; color:#c6b4fa; line-height:1.2; margin-bottom:4px; }
+.orbit-stats>div:last-child strong { color:#ac7afa; }
+.weekly-strip { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; margin:1px 0 22px; }
+.week-day { border:1px solid var(--border); border-radius:9px; background:#171f2e; text-align:center; padding:10px 1px; font-size:11px; }
+.week-day small { display:block; font-size:9px; color:var(--muted); margin-top:3px; }
+.week-day.today { background:linear-gradient(135deg,#b06bff,#8952ef); border-color:#a570ff; box-shadow:0 4px 16px #8646ef30; }
+.week-day.today small { color:white; }
+.section-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:11px; }
+h2 { margin:0; font-size:18px; letter-spacing:-.3px; }
+.section-heading>span { font-size:10px; color:#bf9cff; }
+#watchlistCards { gap:9px; margin:0 0 13px; }
+.anime-card { position:relative; gap:11px; padding:5px; border-radius:10px; background:linear-gradient(125deg,#1a2334,#121a28); }
+.anime-poster { width:85px; height:104px; border-radius:7px; background:linear-gradient(140deg,#302b58,#172541); }
+.anime-body { padding:6px 5px 3px 0; }
+.anime-body strong { font-size:14px; line-height:1.3; padding-right:16px; }
+.anime-meta { font-size:10px; margin:6px 0; line-height:1.4; }
+.new-badge { color:#100e24; font-weight:700; padding:3px 5px; }
+.anime-open { width:auto; padding:7px 10px; font-size:10px; margin-top:3px; }
+.anime-menu { position:absolute; right:8px; top:8px; }
+.anime-menu summary { list-style:none; cursor:pointer; padding:0 5px; font-size:19px; color:#c3bfee; }
+.anime-menu[open] { z-index:4; background:#202b42; border:1px solid var(--border); border-radius:7px; padding:4px; }
+.anime-menu button { display:block; width:105px; padding:7px; font-size:10px; background:transparent; text-align:left; }
+.seasons-grid { grid-template-columns:1fr 1fr; }
+.seasons-grid .anime-card { display:block; padding:0; }
+.seasons-grid .anime-poster { width:100%; height:121px; border-radius:9px 9px 0 0; }
+.seasons-grid .anime-body { padding:8px 9px 10px; }
+.seasons-grid .anime-body strong { font-size:12px; }
+.card-progress { height:7px; background:#3a3b59; border-radius:6px; overflow:hidden; margin-top:8px; width:calc(100% - 40px); }
+.card-progress span { display:block; height:100%; background:linear-gradient(90deg,#9a68f3,#c2a1fc); border-radius:6px; }
+.track-toggle { float:right; margin-top:-11px; width:31px; height:19px; padding:0; border-radius:20px; background:#8050ef; }
+.track-toggle span { display:block; width:13px; height:13px; margin-left:15px; border-radius:50%; background:#eee6ff; }
+.track-toggle.paused { background:#34394f; }
+.track-toggle.paused span { margin-left:3px; }
+.season-strip { display:flex; gap:5px; margin:0 0 12px; }
+.season-strip button { width:25%; font-size:10px; padding:8px 2px; background:#20273a; border:1px solid var(--border); font-weight:400; }
+.season-strip .selected { background:#7342e8; }
+#seasonSettings { margin-bottom:12px; }
+.archive-row { display:block; width:100%; text-align:left; padding:13px 12px; margin-top:10px; background:#182132; border:1px solid var(--border); }
+.archive-row small { color:var(--muted); font-weight:400; }
+.tracker-footer { color:var(--muted); text-align:center; font-size:10px; margin-top:16px; }
+.tracker-footer span { color:var(--success); margin-right:5px; }
+#trackerHint { margin:9px 0 0; line-height:1.5; font-size:10px; }
+.download-heading { display:flex; justify-content:space-between; align-items:center; gap:9px; }
+.manager-badge { white-space:nowrap; padding:6px 9px; border:1px solid #45836b; border-radius:22px; color:#c1efdf; font-size:10px; }
+#downloadsView { border-top:1px solid var(--border); margin-top:9px; }
+main { padding:16px 18px; }
+#progressPanel { background:transparent; border:0; padding:0; margin-top:0; box-shadow:none; }
+.results { border:0; max-height:230px; display:grid; gap:8px; }
+.result-row { display:flex; align-items:center; gap:10px; padding:10px; border:1px solid var(--border); border-radius:10px; background:linear-gradient(120deg,#192234,#121927); }
+.episode-glyph { width:38px; height:44px; display:grid; place-items:center; border-radius:6px; background:#2c2c4a; color:#c1a6ff; font-size:22px; flex-shrink:0; }
+.download-detail { flex:1; min-width:0; }
+.download-detail strong { display:block; font-size:12px; }
+.download-detail small { color:var(--muted); display:block; font-size:10px; margin-top:4px; overflow-wrap:anywhere; }
+.download-state { font-size:10px; color:#c2a7ff; max-width:115px; }
+.download-state.done { color:var(--success); }
+.download-state.failed { color:var(--danger); }
+.download-primary-actions { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin-top:12px; }
+.download-primary-actions button { padding:9px 5px; font-size:11px; }
+.actions button { font-size:10px; padding:7px; }
+.history { background:transparent; border:0; padding:0; box-shadow:none; }
+.history-item { padding:11px 10px; border:1px solid var(--border); border-radius:9px; margin-top:7px; background:#141d2d; }
+.week-day { background:#171f2e; font-weight:400; padding:8px 1px; }
+.week-day.selected-day { outline:2px solid #bc9bff; outline-offset:1px; }
+.calendar-filters { display:flex; gap:7px; margin:-10px 0 17px; }
+.calendar-filters button { width:auto; font-size:10px; padding:6px 9px; background:#20273a; font-weight:400; }
+.calendar-filters button.selected { color:#d9c8ff; background:#34265b; }
+.progress-edit { width:auto; padding:0; background:transparent; font-size:10px; font-weight:400; color:#c5aff5; }
+.anime-menu button { width:130px; }
+dialog { color:var(--text); background:var(--card); border:1px solid var(--border); border-radius:13px; width:380px; max-width:calc(100% - 24px); padding:18px; }
+dialog::backdrop { background:#060b17b0; }
+dialog h2 { margin-bottom:12px; }
+dialog .hint { margin:9px 0 14px; line-height:1.5; }
+dialog label { margin-top:12px; }
+#animeEditorError { color:#ff90a3; }
+.anime-body strong,.anime-poster { cursor:pointer; }
+#animeDetail { width:410px; max-height:560px; overflow-y:auto; }
+.detail-close { width:28px; padding:3px; float:right; font-size:20px; }
+.detail-hero { display:flex; gap:13px; clear:both; margin-top:6px; }
+.detail-hero>div:last-child { flex:1; min-width:0; }
+.detail-poster { width:95px; height:135px; object-fit:cover; border-radius:9px; }
+.detail-placeholder { background:linear-gradient(135deg,#493571,#172541); display:grid; place-items:center; font-size:36px; color:#c7adff; }
+.detail-count { font-size:14px; color:#c2a6ff; margin:8px 0; }
+.detail-favorite { font-size:10px; padding:6px; margin-top:10px; }
+.detail-synopsis { color:var(--muted); font-size:12px; line-height:1.6; max-height:110px; overflow-y:auto; white-space:pre-line; }
+.detail-toolbar { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin:10px 0; }
+.detail-toolbar button { font-size:10px; padding:8px 4px; }
+.episode-filter { display:flex; align-items:center; gap:8px; margin:10px 0; }
+.episode-filter label { margin:0; }
+.episode-filter select { width:125px; padding:5px; }
+.episode-filter span { color:var(--muted); font-size:9px; }
+.episode-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:7px; max-height:230px; overflow-y:auto; padding:3px; }
+.episode-square { aspect-ratio:1; padding:5px 2px; font-size:13px; background:#1e2940; border:1px solid #394866; border-radius:7px; }
+.episode-square small { display:block; font-size:9px; color:var(--muted); }
+.episode-square.is-watched { background:#6741c3; border-color:#ae8af3; }
+.episode-square.is-watched small { color:#a7f2d1; }
+#animeDetailNotes { width:100%; resize:vertical; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); padding:8px; font:inherit; }
+#animeDetailError { color:#c7b0ff; margin-top:9px; }

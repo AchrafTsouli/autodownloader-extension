@@ -134,7 +134,9 @@
 
     function isModernWatchPage() {
         return /(^|\.)witanime\.site$/i.test(location.hostname)
-            && /^\/watch\/[^/]+\/\d+\/?$/i.test(location.pathname);
+            && (/^\/watch\/[^/]+\/\d+\/?$/i.test(location.pathname)
+                || /^\/watch\/movie\/[^/]+\/?$/i.test(location.pathname)
+                || (/^\/movie\/[^/]+\/?$/i.test(location.pathname) && Boolean(csrfToken())));
     }
 
     async function extractModernEpisode() {
@@ -142,7 +144,7 @@
         if (!csrf) throw new Error('WitAnime CSRF token is missing');
 
         const basePath = location.pathname.replace(/\/$/, '');
-        const response = await fetch(`${basePath}/sources`, {
+        const response = await window.autoDownloaderSiteRequest(`${basePath}/sources`, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -193,7 +195,7 @@
 
         const csrf = csrfToken();
         if (!csrf) throw new Error('WitAnime CSRF token is missing');
-        const response = await fetch(`/watch/download-source/${token}`, {
+        const response = await window.autoDownloaderSiteRequest(`/watch/download-source/${token}`, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -207,6 +209,7 @@
                 ? 'WitAnime download session expired; reload the page and retry'
                 : `WitAnime download preparation failed (HTTP ${response.status})`);
         }
+        await window.autoDownloaderSiteSlot();
         return new URL(`/watch/download-gate/${token}`, location.origin).href;
     };
 
