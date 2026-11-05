@@ -1,4 +1,29 @@
 :root { --accent:#8b5cf6; --accent-dark:#6438db; --success:#56dfaa; --danger:#db4667; --text:#f2efff; --muted:#aaa6c8; --bg:#0c1222; --card:#141c30; --border:#2b3450; color-scheme:dark; }
+:root[data-theme="light"] { --text:#182137; --muted:#53617d; --bg:#f2f4fc; --card:#fff; --border:#ccd3e5; color-scheme:light; }
+:root[data-theme="light"] body { background:var(--bg); }
+:root[data-theme="light"] .anime-card { background:var(--card); }
+:root[data-theme="light"] button.secondary { background:#e3e7f4; color:var(--text); }
+:root[data-theme="light"] dialog { background:var(--card); color:var(--text); }
+.library-controls { margin-bottom:18px; }
+.library-controls .two { margin-bottom:8px; }
+.library-controls details, .detail-library details { margin:12px 0; padding:10px; border:1px solid var(--border); border-radius:9px; }
+.library-controls summary, .detail-library summary { cursor:pointer; }
+#bulkAnimeList { max-height:180px; overflow:auto; }
+#bulkAnimeList label { display:block; margin:8px 0; }
+input[type="checkbox"] { width:auto; }
+.inbox-entry { padding:14px 0; border-bottom:1px solid var(--border); }
+.dashboard { width:auto; max-width:1200px; max-height:none; margin:auto; }
+.dashboard #watchlistCards { grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); }
+.dashboard .library-controls .two { max-width:650px; }
+.dashboard .anime-card { min-width:0; }
+.compact-mode .anime-card { padding:8px; }
+.compact-mode .anime-poster { width:44px; height:62px; }
+.detail-library label { display:block; margin:10px 0; }
+.download-selection { display:flex; gap:10px; flex-wrap:wrap; padding:10px 0; }
+.queue-edit-row { display:flex; align-items:center; gap:5px; margin:8px 0; }
+.queue-edit-row span { flex:1; }
+.queue-edit-row button { width:auto; padding:5px 10px; }
+.archive-result { border-bottom:1px solid var(--border); padding:10px 0; }
 @media(prefers-color-scheme:dark) { :root { --text:#f2efff; --muted:#aaa6c8; --bg:#0c1222; --card:#141c30; --border:#2b3450; } }
 body { width:440px; max-height:600px; background:radial-gradient(ellipse at top left,#1c2040,var(--bg) 70%); }
 header { background:transparent; padding:20px 20px 14px; }

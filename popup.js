@@ -287,12 +287,13 @@ function renderJob(job) {
         || job.abortReason
         || (job.currentEpisode
             ? `Processing episode ${job.currentEpisode}`
-            : `${completed} completed, ${failed} failed`);
-    $('stopBtn').disabled = !['queued', 'running', 'pausing', 'paused', 'stopping'].includes(job.status);
+            : `${job.results.filter(r => r.status==='completed').length} browser downloads completed, ${job.results.filter(r => r.status==='external_handoff').length} sent to IDM, ${failed} failed`);
+    const pendingDownloads = job.results.some(item => item.status === 'downloading');
+    $('stopBtn').disabled = !pendingDownloads && !['queued', 'running', 'pausing', 'paused', 'stopping'].includes(job.status);
     $('pauseBtn').disabled = !['queued', 'running'].includes(job.status);
     $('resumeBtn').disabled = job.status !== 'paused';
     $('skipBtn').disabled = !job.currentEpisode || !['running', 'pausing'].includes(job.status);
-    $('retryBtn').disabled = failed === 0 || ['queued', 'running', 'pausing', 'stopping'].includes(job.status);
+    $('retryBtn').disabled = failed === 0 || pendingDownloads || ['queued', 'running', 'pausing', 'paused', 'stopping'].includes(job.status);
 
     const resultsByEpisode = new Map(job.results.map(item => [item.episode, item]));
     $('episodeResults').innerHTML = job.episodes.map(episode => {
@@ -301,11 +302,12 @@ function renderJob(job) {
         const detail = item
             ? [item.actualHost, item.actualQuality, item.reason || item.hostMessage].filter(Boolean).join(' · ')
             : '';
-        const labels = {external_handoff:'Handed to IDM',preparing_download:'Preparing…',completed:'Completed',waiting_for_download:'Waiting…',downloading:'Downloading',queued:'Queued'};
+        const labels = {external_handoff:'Sent to IDM (unverified)',preparing_download:'Preparing…',completed:'Completed',waiting_for_download:'Waiting…',downloading:'Downloading',queued:'Queued'};
         const done = ['completed','external_handoff'].includes(status);
-        return `<div class="result-row"><div class="episode-glyph">▷</div><div class="download-detail"><strong>Episode ${escapeHtml(episode.number)}</strong><small>${escapeHtml(detail || 'Waiting in queue')}</small></div><div class="download-state ${done ? 'done' : status === 'failed' ? 'failed' : ''}">${done ? '✓ ' : ''}${escapeHtml(labels[status] || status.replaceAll('_',' '))}</div></div>`;
+        return `<div class="result-row"><div class="episode-glyph">▷</div><div class="download-detail"><strong>Episode ${escapeHtml(episode.number)}</strong><small>${escapeHtml(detail || 'Waiting in queue')}</small></div><div class="download-state ${done ? 'done' : status === 'failed' ? 'failed' : ''}">${status==='completed' ? '✓ ' : status==='external_handoff' ? '↗ ' : ''}${escapeHtml(labels[status] || status.replaceAll('_',' '))}</div></div>`;
     }).join('');
     updateElapsed();
+    if(typeof renderAdvancedDownloads==='function') renderAdvancedDownloads(job);
 }
 
 function updateElapsed() {
@@ -326,6 +328,8 @@ $('episodeMode').addEventListener('change', () => {
 
 $('startBtn').addEventListener('click', async () => {
     try {
+        const episodes=selectedEpisodes();
+        if(typeof confirmDownloadDuplicates==='function' && !await confirmDownloadDuplicates(episodes)) return;
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         const hostPriority = [...new Set(
             $('hostOrder').value.split(',')
@@ -346,7 +350,7 @@ $('startBtn').addEventListener('click', async () => {
         const response = await chrome.runtime.sendMessage({
             type: 'START_JOB',
             sourceTabId: tab.id,
-            episodes: selectedEpisodes(),
+            episodes,
             options: {
                 quality: $('quality').value,
                 host: $('host').value,
@@ -392,7 +396,11 @@ async function loadPageData() {
 }
 
 $('newBtn').addEventListener('click', async () => {
-    await chrome.runtime.sendMessage({ type: 'CLEAR_JOB' });
+    const response = await chrome.runtime.sendMessage({ type: 'CLEAR_JOB' });
+    if (!response?.ok) {
+        $('status').textContent = response?.error || 'Could not clear the current job';
+        return;
+    }
     currentJob = null;
     $('setupPanel').style.display = '';
     $('progressPanel').style.display = 'none';
@@ -414,7 +422,7 @@ async function loadHistory() {
                 ['completed', 'external_handoff'].includes(result.status)
             ).length || 0;
             const failed = item.results?.filter(result => result.status === 'failed').length || 0;
-            return `<div class="history-item">${escapeHtml(new Date(item.createdAt).toLocaleString())} · ${completed}/${item.episodes?.length || 0} done${failed ? ` · ${failed} failed` : ''}</div>`;
+            return `<div class="history-item">${escapeHtml(new Date(item.createdAt).toLocaleString())} · ${completed}/${item.episodes?.length || 0} completed or handed off${failed ? ` · ${failed} failed` : ''}</div>`;
         }).join('')
         : 'No job history yet.';
 }

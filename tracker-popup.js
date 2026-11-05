@@ -34,11 +34,12 @@ function renderOrbit() {
     const year = Number($('trackYear').value);
     const selected = orbitList.filter(item => item.season === season && item.year === year);
     const activeItems = selected.filter(item => !item.paused);
-    const items = orbitView === 'week' ? activeItems.filter(item => calendarFilter === 'all'
+    let items = orbitView === 'week' ? activeItems.filter(item => calendarFilter === 'all'
         || (calendarFilter === 'unknown' ? releaseWeekday(item) === null : releaseWeekday(item) === Number(calendarFilter))) : selected;
-    const unread = items.filter(item => animeProgress(item).next !== null).length;
+    if (typeof filterOrbitLibrary === 'function') items=filterOrbitLibrary(items);
+    const unread = items.reduce((count,item) => {const info=animeProgress(item);return count+info.total-info.count;},0);
     $('seasonHeading').textContent = `${season} ${year}`;
-    $('trackerSummary').textContent = `${unread} to catch up`;
+    $('trackerSummary').textContent = `${unread} unwatched episodes`;
     const seasonsView = orbitView === 'seasons';
     $('trackerSubtitle').textContent = seasonsView ? 'Your seasonal watchlist, all in one orbit.' : 'Your weekly episodes at a glance.';
     $('orbitStats').hidden = seasonsView;
@@ -81,6 +82,7 @@ function renderOrbit() {
         if(edit) edit.textContent=`Watched ${info.count} of ${info.total} ✎`;
         if(seasonsView) card.querySelector('.anime-meta').textContent=`${info.count} of ${info.total} episodes watched${item.paused ? ' · Paused' : ''}`;
     });
+    if (typeof renderLibraryOverview === 'function') renderLibraryOverview();
 }
 document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => {
     orbitView = button.dataset.view;
@@ -102,7 +104,8 @@ $('watchlistCards').addEventListener('click', async event => {
     try {
         if (button.dataset.action === 'open') {
             const item = orbitList.find(entry => entry.id === id);
-            await chrome.tabs.create({ url: item.latestUrl || item.url });
+            const next=animeProgress(item).next;
+            await chrome.tabs.create({ url: next ? `${item.url.replace('/anime/','/watch/')}/${next}` : item.url });
         } else if (['watched','schedule'].includes(button.dataset.action)) openAnimeEditor(id, button.dataset.action);
         else await orbitMessage({type:'TRACKER_UPDATE', id, action:button.dataset.action});
     } catch (error) { $('trackerHint').textContent = error.message; }
@@ -143,7 +146,7 @@ $('seasonArchive').addEventListener('click', event => {
     const label = event.target.closest('[data-archive]')?.dataset.archive;
     if (label) { const [season,year] = label.split(' '); $('trackSeason').value=season; $('trackYear').value=year; renderOrbit(); }
 });
-for (const id of ['orbitSettingsBtn','notificationSettingsBtn']) $(id).addEventListener('click', () => {
+$('orbitSettingsBtn').addEventListener('click', () => {
     $('seasonSettings').hidden = !$('seasonSettings').hidden;
     $('trackerHint').textContent = 'Choose the season and year for your watchlist. Use each card’s menu to pause notifications.';
 });

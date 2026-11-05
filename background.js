@@ -1,4 +1,4 @@
-importScripts('host-config.js');
+importScripts('host-config.js', 'queue-tools.js');
 
 const STORAGE_KEY = 'autoDownloaderJob';
 const HISTORY_KEY = 'autoDownloaderHistory';
@@ -163,7 +163,7 @@ function waitForTabComplete(tabId, timeoutMs = 30000) {
         chrome.tabs.onUpdated.addListener(listener);
         chrome.tabs.get(tabId).then(tab => {
             if (tab.status === 'complete') finish();
-        }).catch(() => {});
+        }).catch(error => finish(error));
     });
 }
 
@@ -193,6 +193,22 @@ async function prepareModernDownload(tabId, token) {
         throw new Error('WitAnime did not return a valid download gate');
     }
     return result;
+}
+
+async function openModernDownload(tabId, requested) {
+    await withCancellation(waitForTabComplete(tabId));
+    const extracted = await withCancellation(extractEpisode(tabId));
+    const source = extracted.downloads.find(item => item.host === requested.host
+        && item.quality === requested.quality
+        && item.version === requested.version && item.lang === requested.lang);
+    if (!source) throw new Error('Selected source is no longer available on the episode page');
+    const gateUrl = await withCancellation(prepareModernDownload(tabId, source.token));
+    // Navigate from the Witanime document that prepared the token, just as
+    // the site's player does, rather than opening a gate from an extension tab.
+    await chrome.scripting.executeScript({
+        target:{tabId}, world:'MAIN', args:[gateUrl],
+        func:url => { window.location.assign(url); }
+    });
 }
 
 function waitForDownloadStart(tabId, timeoutMs, metadata = {}) {
@@ -233,13 +249,43 @@ chrome.tabs.onCreated.addListener(tab => {
     pendingDownloadTabs.set(tab.id, pending);
 });
 
-chrome.downloads.onCreated.addListener(item => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    const pending = pendingDownloadTabs.get(tabId);
+    if (!pending || changeInfo.status !== 'complete') return;
+    let url;
+    try { url = new URL(tab.url); } catch { return; }
+    if (url.origin === 'https://witanime.site' && url.pathname.startsWith('/watch/download-gate/')
+        && /غير موجودة|not found|\b404\b/i.test(tab.title || '')) {
+        pending.reject(new Error('WitAnime download gate rejected or expired (page not found); retrying requires a fresh episode session'));
+    }
+});
+
+async function downloadMatchesPending(item, pending) {
+    const tabs = await Promise.all([...pending.tabIds].map(id => chrome.tabs.get(id).catch(() => null)));
+    const pages = tabs.flatMap(tab => {
+        try { return [new URL(tab.url)]; } catch { return []; }
+    });
+    return [item.referrer,item.url,item.finalUrl].some(value => {
+        try {
+            let url = new URL(value);
+            if (url.protocol === 'blob:') url = new URL(url.pathname);
+            if (!['https:','http:'].includes(url.protocol)) return false;
+            return detectHost(url.href) === pending.host || pages.some(page =>
+                page.origin === url.origin && (page.hostname !== 'witanime.site' || page.pathname === url.pathname));
+        } catch { return false; }
+    });
+}
+
+chrome.downloads.onCreated.addListener(async item => {
     let pending = pendingDownloadTabs.get(item.tabId);
-    // Blob/data downloads can occasionally be reported without their source
-    // tab. The queue permits only one pending host, so this fallback is safe.
+    // Chrome's DownloadItem has no source tab ID. Match its URL/referrer to
+    // the pending host or its redirect tabs instead of claiming any download
+    // the user happens to start while an episode is waiting.
     const uniquePending = new Set(pendingDownloadTabs.values());
     if (!pending && uniquePending.size === 1) {
-        pending = uniquePending.values().next().value;
+        const candidate = uniquePending.values().next().value;
+        if (await downloadMatchesPending(item,candidate)
+            && [...candidate.tabIds].some(id => pendingDownloadTabs.get(id) === candidate)) pending = candidate;
     }
     if (pending) pending.resolve(item);
 });
@@ -250,11 +296,16 @@ chrome.downloads.onChanged.addListener(async delta => {
     if (!job) return;
     const record = job.results.find(result => result.downloadId === delta.id);
     if (!record) return;
-    if (record.status === 'cancelled') return;
+    await applyDownloadState(job, record, {state:delta.state?.current,error:delta.error?.current});
+});
 
-    if (delta.state?.current === 'complete') {
+async function applyDownloadState(job, record, download) {
+    if (['cancelled','completed','external_handoff'].includes(record.status)) return;
+
+    if (download.state === 'complete') {
         record.status = 'completed';
         record.completedAt = now();
+        if(typeof confirmBrowserEpisodeDownload==='function') await serializeTracker(() => confirmBrowserEpisodeDownload(record)).catch(() => {});
         if (record.hostTabId) chrome.tabs.remove(record.hostTabId).catch(() => {});
         if (record.finalHostTabId && record.finalHostTabId !== record.hostTabId) {
             chrome.tabs.remove(record.finalHostTabId).catch(() => {});
@@ -262,24 +313,30 @@ chrome.downloads.onChanged.addListener(async delta => {
         for (const tabId of record.relatedHostTabIds || []) {
             chrome.tabs.remove(tabId).catch(() => {});
         }
-    } else if (delta.state?.current === 'interrupted' || delta.error) {
-        const errorCode = delta.error?.current || 'Download interrupted';
+    } else if (download.state === 'interrupted' || download.error) {
+        const errorCode = download.error || 'Download interrupted';
 
-        // IDM and similar managers take ownership by cancelling Chrome's
-        // temporary download after it has been created. That appears as
-        // USER_CANCELED even though the external download is healthy.
-        if (errorCode === 'USER_CANCELED' && record.downloadStartedAt) {
+        // Cancellation is only an unverified manager handoff when external
+        // mode was selected. In browser mode it is an actual cancellation.
+        if (errorCode === 'USER_CANCELED' && record.downloadStartedAt
+            && job.options.downloadManager === 'external') {
             record.status = 'external_handoff';
             record.reason = 'Download handed to an external download manager';
+            record.completedAt = now();
+        } else if (errorCode === 'USER_CANCELED') {
+            record.status = 'cancelled';
+            record.reason = 'Browser download cancelled';
             record.completedAt = now();
         } else {
             record.status = 'failed';
             record.reason = errorCode;
+            record.completedAt = now();
         }
-    }
+    } else return;
     await saveJob(job);
+    if (['failed','paused'].includes(job.status)) await archiveJob(job);
     await finishJobIfSettled(job);
-});
+}
 
 async function finishJobIfSettled(job) {
     const terminal = job.results.filter(item =>
@@ -290,15 +347,14 @@ async function finishJobIfSettled(job) {
         job.finishedAt = now();
         await saveJob(job);
         await archiveJob(job);
-        const completed = job.results.filter(item =>
-            ['completed', 'external_handoff'].includes(item.status)
-        ).length;
+        const completed = job.results.filter(item => item.status === 'completed').length;
+        const handoffs = job.results.filter(item => item.status === 'external_handoff').length;
         const failed = job.results.filter(item => item.status === 'failed').length;
         await chrome.notifications.create(`autodownloader-${job.id}`, {
             type: 'basic',
             iconUrl: 'icon128.png',
             title: 'Auto Downloader finished',
-            message: `${completed}/${job.results.length} completed${failed ? `, ${failed} failed` : ''}. Open the extension for the report.`
+            message: `${completed} browser downloads completed, ${handoffs} sent to an external manager${failed ? `, ${failed} failed` : ''}. External completion is not verified.`
         });
     }
 }
@@ -324,7 +380,10 @@ async function attemptDownloadChoice(job, record, episodeTab, choice) {
         && ['wtsrv', 'kuhaku'].includes(routeHost);
     const hostTab = usesNativeSiteFlow
         ? episodeTab
-        : await chrome.tabs.create({ url: 'about:blank', active: requiresManualAction });
+        : await chrome.tabs.create({
+            url: choice.item.flow === 'witanime_api' ? record.episodeUrl : 'about:blank',
+            active: requiresManualAction
+        });
 
     record.actualQuality = choice.item.quality;
     record.actualHost = choice.item.host;
@@ -342,15 +401,15 @@ async function attemptDownloadChoice(job, record, episodeTab, choice) {
         episode: record.episode,
         allowExternal: job.options.downloadManager === 'external'
     });
+    // Preparation can outlast the download timeout or lose its page. Attach
+    // a handler now; the awaited original promise still propagates the error.
+    downloadStarted.catch(() => {});
 
     try {
         if (choice.item.flow === 'witanime_api') {
-            const gateUrl = await withCancellation(
-                prepareModernDownload(episodeTab.id, choice.item.token)
-            );
             record.status = 'waiting_for_download';
             await saveJob(job);
-            await chrome.tabs.update(hostTab.id, { url: gateUrl });
+            await openModernDownload(hostTab.id, choice.item);
             if (requiresManualAction) {
                 record.status = 'waiting_for_verification';
                 record.hostMessage = 'Complete the Send verification and click its download button.';
@@ -409,6 +468,12 @@ async function attemptDownloadChoice(job, record, episodeTab, choice) {
         record.hostTabClosedAt = now();
     }
     await saveJob(job);
+    // Completion/interruption can arrive before processEpisode has assigned
+    // downloadId, especially with small files or an external download manager.
+    if (record.downloadId) {
+        const [current] = await chrome.downloads.search({id:record.downloadId}).catch(() => []);
+        if (current) await applyDownloadState(job, record, current);
+    }
     return { consumedEpisodeTab: usesNativeSiteFlow };
 }
 
@@ -439,6 +504,7 @@ async function processEpisode(job, episode) {
 
         record.attemptErrors = [];
         let refreshedSession = false;
+        let tabRecoveries = 0;
         for (let index = 0; index < choices.length; index++) {
             const choice = choices[index];
             record.attempts = index + 1;
@@ -457,20 +523,38 @@ async function processEpisode(job, episode) {
                 });
                 await closeAttemptTabs(record, episodeTab?.id);
 
+                if (stopRequested || skipRequestedEpisode === episode.number) throw error;
                 const expired = /expired|HTTP (404|419)/i.test(error.message);
-                if (choice.item.flow === 'witanime_api' && expired && !refreshedSession) {
-                    refreshedSession = true;
-                    await chrome.tabs.reload(episodeTab.id);
+                const lostPage = /No tab with id|Frame with ID \d+ was removed|frame (?:was )?removed|No frame with id|document (?:was )?unloaded/i.test(error.message);
+                if (lostPage && tabRecoveries >= 2) {
+                    throw new Error('The episode page repeatedly closed or navigated during download preparation. Keep the episode tab open and retry.');
+                }
+                if (choice.item.flow === 'witanime_api'
+                    && ((expired && !refreshedSession) || (lostPage && tabRecoveries < 2))) {
+                    if (lostPage) {
+                        tabRecoveries++;
+                        // A navigation destroys the injected request; a closed tab
+                        // cannot be reused by any of the remaining host choices.
+                        await chrome.tabs.remove(episodeTab.id).catch(() => {});
+                        episodeTab = await chrome.tabs.create({url:episode.url,active:false});
+                        record.episodeTabId = episodeTab.id;
+                    } else {
+                        refreshedSession = true;
+                        await chrome.tabs.reload(episodeTab.id);
+                    }
                     await withCancellation(waitForTabComplete(episodeTab.id));
                     const refreshed = await withCancellation(extractEpisode(episodeTab.id));
-                    const replacement = buildDownloadChoices(refreshed.downloads, job.options)
-                        .find(item => item.item.host === choice.item.host
-                            && item.item.quality === choice.item.quality);
-                    if (replacement) {
-                        choices.splice(index + 1, 0, replacement);
-                    }
+                    const freshChoices = buildDownloadChoices(refreshed.downloads, job.options);
+                    const sameChoice = (a,b) => a.item.host === b.item.host
+                        && a.item.quality === b.item.quality
+                        && a.item.version === b.item.version && a.item.lang === b.item.lang;
+                    // Every token belongs to the refreshed page/session, including
+                    // tokens for hosts that have not yet been attempted.
+                    const remaining = choices.slice(index + 1).map(old =>
+                        freshChoices.find(fresh => sameChoice(old,fresh))).filter(Boolean);
+                    const replacement = freshChoices.find(fresh => sameChoice(choice,fresh));
+                    choices.splice(index + 1, choices.length, ...(replacement ? [replacement] : []), ...remaining);
                 }
-                if (stopRequested || skipRequestedEpisode === episode.number) throw error;
             }
         }
         const summary = record.attemptErrors
@@ -504,7 +588,13 @@ async function runJob() {
     startKeepAlive();
     try {
         const job = await getJob();
-        if (!job || !['queued', 'running', 'pausing', 'stopping'].includes(job.status)) return;
+        if (!job) return;
+        // Download events may have happened while this worker was stopped.
+        for (const record of job.results.filter(item => item.status === 'downloading' && item.downloadId)) {
+            const [download] = await chrome.downloads.search({id:record.downloadId}).catch(() => []);
+            if (download) await applyDownloadState(job, record, download);
+        }
+        if (!['queued', 'running', 'pausing', 'stopping'].includes(job.status)) return;
         if (job.status === 'pausing') {
             job.status = 'paused';
             job.currentEpisode = null;
@@ -613,32 +703,39 @@ async function runJob() {
     }
 }
 
+let jobStartLock=Promise.resolve();
+function hasActiveDownloads(job) {
+    return Boolean(job?.results?.some(record => record.status === 'downloading'));
+}
+function startDownloadJob(request) {
+    const task=jobStartLock.then(async () => {
+        const existing=await getJob();
+        if(running || (existing && (['queued','running','pausing','paused','stopping'].includes(existing.status)
+            || hasActiveDownloads(existing)))) throw new Error('A download job is already running; wait for its downloads or stop it first');
+        if(!Array.isArray(request.episodes) || !request.episodes.length || request.episodes.length>10000) throw new Error('Choose at least one episode');
+        const numbers=new Set();
+        for(const episode of request.episodes) {
+            const url=new URL(episode.url);
+            if(!Number.isInteger(episode.number) || episode.number<1 || numbers.has(episode.number)
+                || !['https:','http:'].includes(url.protocol) || !['witanime.site','witanime.you'].some(host => url.hostname===host || url.hostname.endsWith(`.${host}`))) throw new Error('Invalid episode selection');
+            numbers.add(episode.number);
+        }
+        const job={id:crypto.randomUUID(),status:'queued',sourceTabId:request.sourceTabId,episodes:request.episodes,options:request.options,
+            nextIndex:0,currentEpisode:null,queueFinished:false,abortReason:null,finishedAt:null,results:[],createdAt:now(),updatedAt:now()};
+        activeJob=job;await saveJob(job);runJob();return job;
+    });
+    jobStartLock=task.catch(() => {});return task;
+}
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
+        if (message.type === 'EDIT_QUEUE') {
+            const job=await getJob();
+            if(!job || running) throw new Error('Wait until the queue is paused');
+            job.episodes=editPendingEpisodes(job,message.numbers);
+            await saveJob(job);sendResponse({ok:true,job});return;
+        }
         if (message.type === 'START_JOB') {
-            const existing = await getJob();
-            if (existing && ['queued', 'running', 'pausing', 'paused', 'stopping'].includes(existing.status)) {
-                sendResponse({ ok: false, error: 'A download job is already running' });
-                return;
-            }
-            const job = {
-                id: crypto.randomUUID(),
-                status: 'queued',
-                sourceTabId: message.sourceTabId,
-                episodes: message.episodes,
-                options: message.options,
-                nextIndex: 0,
-                currentEpisode: null,
-                queueFinished: false,
-                abortReason: null,
-                finishedAt: null,
-                results: [],
-                createdAt: now(),
-                updatedAt: now()
-            };
-            activeJob = job;
-            await saveJob(job);
-            runJob();
+            const job=await startDownloadJob(message);
             sendResponse({ ok: true, job });
             return;
         }
@@ -649,7 +746,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 item.hostTabId === tabId
                 && !['completed', 'failed', 'cancelled', 'skipped', 'external_handoff'].includes(item.status)
             ) || job?.results.find(item =>
-                item.episode === job.currentEpisode
+                pendingDownloadTabs.get(tabId)?.tabIds.has(item.hostTabId)
+                && item.episode === job.currentEpisode
                 && ['waiting_for_download', 'waiting_for_redirect', 'waiting_for_verification'].includes(item.status)
             );
             if (record) {
@@ -679,10 +777,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             const job = await getJob();
             const tabId = sender.tab?.id;
             let pending = tabId ? pendingDownloadTabs.get(tabId) : null;
-            const uniquePending = new Set(pendingDownloadTabs.values());
-            if (!pending && uniquePending.size === 1) {
-                pending = uniquePending.values().next().value;
-            }
             const accepted = Boolean(
                 pending?.allowExternal
                 && job?.options?.downloadManager === 'external'
@@ -815,7 +909,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         if (message.type === 'CLEAR_JOB') {
             const job = await getJob();
-            if (job && ['queued', 'running', 'pausing', 'stopping'].includes(job.status)) {
+            if (job && (running || hasActiveDownloads(job) || ['queued', 'running', 'pausing', 'stopping'].includes(job.status))) {
                 sendResponse({ ok: false, error: 'Stop the active job before clearing it' });
                 return;
             }
@@ -827,6 +921,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         if (message.type === 'RETRY_FAILED') {
             const oldJob = await getJob();
+            if (running || hasActiveDownloads(oldJob)
+                || ['queued','running','pausing','paused','stopping'].includes(oldJob?.status)) {
+                throw new Error('Wait for the current queue to finish or stop it before retrying');
+            }
             const completedNumbers = new Set(
                 oldJob?.results
                     .filter(item => ['completed', 'external_handoff', 'skipped'].includes(item.status))
@@ -837,28 +935,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({ ok: false, error: 'No failed episodes to retry' });
                 return;
             }
-            const job = {
-                ...oldJob,
-                id: crypto.randomUUID(),
-                status: 'queued',
-                episodes: retryEpisodes,
-                nextIndex: 0,
-                currentEpisode: null,
-                queueFinished: false,
-                abortReason: null,
-                finishedAt: null,
-                results: [],
-                createdAt: now(),
-                updatedAt: now()
-            };
-            activeJob = job;
-            await saveJob(job);
-            runJob();
+            const job = await startDownloadJob({sourceTabId:oldJob.sourceTabId,episodes:retryEpisodes,options:oldJob.options});
             sendResponse({ ok: true, job });
         }
     })().catch(error => sendResponse({ ok: false, error: error.message }));
     return true;
 });
 
-chrome.runtime.onStartup.addListener(() => runJob());
-importScripts('witanime-schedule.js', 'tracker-progress.js', 'tracker-background.js');
+chrome.runtime.onStartup.addListener(() => runJob().catch(console.error));
+// onStartup fires for browser startup, not every MV3 worker restart. An
+// alarm also recovers a persisted queue after the worker is suspended.
+chrome.alarms?.create('orbit-download-recovery', {periodInMinutes:1});
+chrome.alarms?.onAlarm.addListener(alarm => {
+    if (alarm.name === 'orbit-download-recovery') runJob().catch(console.error);
+});
+importScripts('witanime-schedule.js', 'tracker-progress.js', 'orbit-library.js', 'tracker-background.js');

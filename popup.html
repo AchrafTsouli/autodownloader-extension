@@ -174,7 +174,7 @@
       <div class="field">
         <label for="downloadManager">Download manager</label>
         <select id="downloadManager">
-          <option value="browser">Browser / automatic detection</option>
+          <option value="browser">Browser downloads</option>
           <option value="external">IDM / external manager</option>
         </select>
       </div>
@@ -200,7 +200,7 @@
       <div class="progress-head"><strong id="jobState">Idle</strong><span id="progressText">0 / 0</span></div>
       <div class="track"><div class="bar" id="progressBar"></div></div>
       <div class="counts">
-        <div class="count"><strong id="completedCount">0</strong>Done</div>
+        <div class="count"><strong id="completedCount">0</strong>Processed</div>
         <div class="count"><strong id="failedCount">0</strong>Failed</div>
         <div class="count"><strong id="activeCount">0</strong>Active</div>
       </div>
@@ -245,8 +245,11 @@
   <script src="popup.js"></script>
   <script src="tracker-schedule.js"></script>
   <script src="tracker-progress.js"></script>
+  <script src="orbit-library.js"></script>
   <script src="witanime-schedule.js"></script>
   <script src="tracker-popup.js"></script>
   <script src="anime-detail.js"></script>
+  <script src="library-ui.js"></script>
+  <script src="download-library.js"></script>
 </body>
 </html>

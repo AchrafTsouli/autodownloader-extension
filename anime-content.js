@@ -139,27 +139,51 @@
                 || (/^\/movie\/[^/]+\/?$/i.test(location.pathname) && Boolean(csrfToken())));
     }
 
+    async function currentPlayerManifest() {
+        const root = document.querySelector('[x-data^="watchPlayer("]');
+        if (!root || typeof window.Alpine?.$data !== 'function') return null;
+        // The player is already fetching /sources during initialization.
+        // Reuse its live tokens instead of racing it with another manifest.
+        for (let attempt = 0; attempt < 200; attempt++) {
+            const player = window.Alpine.$data(root);
+            if (player.sourcesLoaded === true) {
+                if (player.sourcesError) throw new Error(player.sourcesStale
+                    ? 'WitAnime download session expired; reload the page and retry'
+                    : 'WitAnime player could not load download sources');
+                if (!player.downloads || typeof player.downloads !== 'object') {
+                    throw new Error('WitAnime player download manifest is unavailable');
+                }
+                return {downloads:player.downloads};
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        throw new Error('WitAnime player timed out while loading download sources');
+    }
+
     async function extractModernEpisode() {
         const csrf = csrfToken();
         if (!csrf) throw new Error('WitAnime CSRF token is missing');
 
-        const basePath = location.pathname.replace(/\/$/, '');
-        const response = await window.autoDownloaderSiteRequest(`${basePath}/sources`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                Accept: 'application/json',
-                'X-CSRF-TOKEN': csrf
+        let manifest = await currentPlayerManifest();
+        if (!manifest) {
+            const basePath = location.pathname.replace(/\/$/, '');
+            const response = await window.autoDownloaderSiteRequest(`${basePath}/sources`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrf
+                }
+            });
+            if (!response.ok) {
+                const stale = response.status === 404 || response.status === 419;
+                throw new Error(stale
+                    ? 'WitAnime download session expired; reload the page and retry'
+                    : `WitAnime sources request failed (HTTP ${response.status})`);
             }
-        });
-        if (!response.ok) {
-            const stale = response.status === 404 || response.status === 419;
-            throw new Error(stale
-                ? 'WitAnime download session expired; reload the page and retry'
-                : `WitAnime sources request failed (HTTP ${response.status})`);
-        }
 
-        const manifest = await response.json();
+            manifest = await response.json();
+        }
         const downloads = [];
         for (const [quality, entries] of Object.entries(manifest.downloads || {})) {
             if (!Array.isArray(entries)) continue;
@@ -209,7 +233,8 @@
                 ? 'WitAnime download session expired; reload the page and retry'
                 : `WitAnime download preparation failed (HTTP ${response.status})`);
         }
-        await window.autoDownloaderSiteSlot();
+        // The site's player consumes the prepared gate immediately. Request
+        // pacing already happened before the POST; do not age the gate here.
         return new URL(`/watch/download-gate/${token}`, location.origin).href;
     };
 
